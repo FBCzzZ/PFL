@@ -6,6 +6,7 @@ from models.Nets import CNN
 from models.utils import aggregation_avg
 from models.client_fedAvg import Client
 import torch.nn.functional as F
+from DataSets.utils import non_iid_sampling
 
 data_list = ['mnist', 'usps', 'svhn', 'syn']
 local_ep_list = [5, 15, 5, 2]
@@ -30,8 +31,12 @@ if __name__ == '__main__':
     # copy weights
     w_glob = net_glob.state_dict()
 
+    if args.noIid:
+        client_class = non_iid_sampling(args)
+
     for i in range(args.num_users):
-        client_list.append(Client(args, data_list[i], copy.deepcopy(net_glob).to(args.device), local_ep_list[i]))
+        client_list.append(Client(args, data_list[i], copy.deepcopy(net_glob).to(args.device), local_ep_list[i], client_class[i]))
+        print(f"client{i},数据集{data_list[i]}:{client_class[i]}")
         w_local_list.append(w_glob)
 
     for iter in range(args.epochs):

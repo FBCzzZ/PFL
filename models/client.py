@@ -1,15 +1,20 @@
 import torch
 import copy
+import numpy as np
 from torch import nn
 import torch.nn.functional as F
-from DataSets.dataLoad import get_dataLoad
+from DataSets.dataLoad import IMBALANCEDataset
 from utils.FFT import spectral_cal
 
 
 class Client(object):
-    def __init__(self, args, dataName, net, local_ep):
+    def __init__(self, args, dataName, net, local_ep, client_class):
         self.args = args
-        self.dataset_train, self.dataset_test = get_dataLoad(args.data_path, dataName, args.batch_size)
+        imbalance_dataset = IMBALANCEDataset(args, dataName, client_class)
+
+        self.dataset_train = torch.utils.data.DataLoader(imbalance_dataset.train_dataset, batch_size=args.batch_size, shuffle=True)
+        self.dataset_test = torch.utils.data.DataLoader(imbalance_dataset.test_dataset, batch_size=args.batch_size, shuffle=False)
+
         self.net = net
         self.local_ep = local_ep
         self.loss_func = nn.CrossEntropyLoss()
