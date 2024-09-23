@@ -53,7 +53,7 @@ class Client(object):
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
         print(f'localEpochLoss:{sum(epoch_loss) / len(epoch_loss)}')
-        return w_FFT, sum(epoch_loss) / len(epoch_loss)
+        return self.net.state_dict(), w_FFT, sum(epoch_loss) / len(epoch_loss)
 
     def eval(self):
         self.net.eval()
@@ -81,4 +81,5 @@ class Client(object):
 
     def save(self):
         w = self.net.state_dict()
-        torch.save(w, f'{self.dataName}_model_state_dict.pth')
+        # torch.save(w, f'{self.dataName}_model_state_dict.pth')
+        torch.save(w, f'/kaggle/working/{self.dataName}_model_state_dict.pth')
