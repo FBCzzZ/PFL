@@ -36,13 +36,11 @@ def FFT_weights_cal(model):
     return all_fft_weights_array
 
 
-def spectral_cal(model, input=True):
+def spectral_cal(model):
     F_weights = FFT_weights_cal(model)
     prob_dist = np.abs(F_weights)
     prob_dist /= np.sum(prob_dist)
 
-    # prob_dist = torch.tensor(prob_dist, dtype=torch.float)
-    #
-    # if input == True:
-    #     prob_dist = F.log_softmax(prob_dist, dim=0)
+    prob_dist = torch.tensor(prob_dist, dtype=torch.float)
+
     return prob_dist

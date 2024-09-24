@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
             # 每个客户端进行本地训练
             loss_locals = []
-            w, w_fft, loss = client_list[i].train(w_FFT_glob)
+            w, w_fft, loss = client_list[i].train(w_FFT_glob, net_glob)
             w_FFT_list[i] = copy.deepcopy(w_fft)
             w_local_list[i] = copy.deepcopy(w)
             loss_locals.append(copy.deepcopy(loss))

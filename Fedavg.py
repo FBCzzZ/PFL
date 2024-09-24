@@ -78,5 +78,5 @@ if __name__ == '__main__':
             print('\nTest set: Average loss: {:.4f} \n{}_glob_Accuracy: {}/{} ({:.2f}%)\n'.format(
                 test_loss, client_list[i].dataName, correct, dataset_test_len, accuracy))
 
-    # torch.save(w_glob, 'model_state_dict.pth')
-    torch.save(w_glob, '/kaggle/working/model_state_dict.pth')
+    torch.save(w_glob, 'model_state_dict.pth')
+    # torch.save(w_glob, '/kaggle/working/model_state_dict.pth')

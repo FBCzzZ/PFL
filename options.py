@@ -21,8 +21,8 @@ def args_parser():
     parser.add_argument('--p', type=float, default=0.5, help="non iid sampling prob for class")
     parser.add_argument('--gpu', type=int, default=0, help="GPU ID, -1 for CPU")
     parser.add_argument('--seed', type=int, default=403, help='random seed (default: 1)')
-    # parser.add_argument('--data_path', type=str, default='./DataSets/data', help="path of dataset")
-    parser.add_argument('--data_path', type=str, default='../..', help="path of dataset")
+    parser.add_argument('--data_path', type=str, default='./DataSets/data', help="path of dataset")
+    # parser.add_argument('--data_path', type=str, default='../..', help="path of dataset")
     parser.add_argument('--batch_size', type=int, default=256, help="batch_size")
     args = parser.parse_args()
     return args

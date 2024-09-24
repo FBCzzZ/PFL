@@ -21,8 +21,9 @@ class Client(object):
         self.loss_func_kl = nn.KLDivLoss(reduction="batchmean")
         self.dataName = dataName
 
-    def train(self, w_FFT_glob):
+    def train(self, w_FFT_glob, net_glob):
         self.net.train()
+        net_glob.eval()
         # train and update
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
@@ -30,6 +31,8 @@ class Client(object):
         for iter in range(self.local_ep):
             batch_loss = []
             Spec_loss = 0
+            dist_loss = 0
+            T = 2
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()
@@ -39,11 +42,19 @@ class Client(object):
                 w_FFT = spectral_cal(self.net)
 
                 if w_FFT_glob is not None:
+                    # 全局低频谱对本地模型的谱蒸馏
                     w_FFT = torch.tensor(w_FFT, dtype=torch.float)
                     w_FFT_glob = torch.tensor(w_FFT_glob, dtype=torch.float)
-                    Spec_loss = self.loss_func_kl(w_FFT, w_FFT_glob)
+                    Spec_loss = self.loss_func_kl(w_FFT.log(), w_FFT_glob)
 
-                loss = base_loss + Spec_loss
+
+                    # 全局模型对本地模型的知识蒸馏
+                    glob_probs = net_glob(images)
+                    log_probs = F.log_softmax(log_probs/T, dim=0)
+                    glob_probs = F.softmax(glob_probs/T, dim=0)
+                    dist_loss = self.loss_func_kl(log_probs, glob_probs)
+
+                loss = base_loss + Spec_loss + dist_loss
                 loss.backward()
                 optimizer.step()
                 if batch_idx % 10 == 0:
@@ -81,5 +92,5 @@ class Client(object):
 
     def save(self):
         w = self.net.state_dict()
-        # torch.save(w, f'{self.dataName}_model_state_dict.pth')
-        torch.save(w, f'/kaggle/working/{self.dataName}_model_state_dict.pth')
+        torch.save(w, f'{self.dataName}_model_state_dict.pth')
+        # torch.save(w, f'/kaggle/working/{self.dataName}_model_state_dict.pth')
