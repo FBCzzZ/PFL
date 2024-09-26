@@ -19,11 +19,43 @@ class CNN(nn.Module):
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)  # 假设输出类别数为10
 
-    def forward(self, x):
+    def forward(self, x, with_classify=True):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 8 * 8)
-        x = F.relu(self.fc1(x))
+
+        x1 = x.view(-1, 16 * 8 * 8)
+        x = F.relu(self.fc1(x1))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
-        return x
+        if with_classify:
+            return x
+        else:
+            return x1
+
+    def freeze_feature_extractor(self):
+        for param in self.conv1.parameters():
+            param.requires_grad = False
+        for param in self.conv2.parameters():
+            param.requires_grad = False
+
+    def freeze_classifier(self):
+        for param in self.fc1.parameters():
+            param.requires_grad = False
+        for param in self.fc2.parameters():
+            param.requires_grad = False
+        for param in self.fc3.parameters():
+            param.requires_grad = False
+
+    def unfreeze_feature_extractor(self):
+        for param in self.conv1.parameters():
+            param.requires_grad = True
+        for param in self.conv2.parameters():
+            param.requires_grad = True
+
+    def unfreeze_classifier(self):
+        for param in self.fc1.parameters():
+            param.requires_grad = True
+        for param in self.fc2.parameters():
+            param.requires_grad = True
+        for param in self.fc3.parameters():
+            param.requires_grad = True

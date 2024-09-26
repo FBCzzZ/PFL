@@ -21,50 +21,82 @@ class Client(object):
         self.loss_func_kl = nn.KLDivLoss(reduction="batchmean")
         self.dataName = dataName
 
-    def train(self, w_FFT_glob, net_glob):
+
+    def train_convs(self, convs_FFT_glob):
+        self.net.train()
+        # train and update
+        optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+
+        epoch_loss = []
+        for epoch in range(self.local_ep):
+            batch_loss = []
+            Spec_loss = 0
+            for batch_idx, (images, labels) in enumerate(self.dataset_train):
+                images, labels = images.to(self.args.device), labels.to(self.args.device)
+                self.net.zero_grad()  # 清除梯度
+                self.net.freeze_classifier()  # 冻结分类器
+
+                output = self.net(images)
+                base_loss = self.loss_func(output, labels)
+                convs_FFT = spectral_cal(self.get_conv_weight())
+                convs_FFT = convs_FFT[:int(len(convs_FFT)/2)]
+
+                if convs_FFT_glob is not None:
+                    # 全局低频谱对本地特征提取器的谱蒸馏
+                    l_probs = torch.tensor(convs_FFT, dtype=torch.float)
+                    g_probs = torch.tensor(convs_FFT_glob, dtype=torch.float)
+                    Spec_loss = self.loss_func_kl(l_probs.log(), g_probs)
+
+                loss = base_loss + Spec_loss
+                loss.backward()
+                optimizer.step()
+                self.net.unfreeze_classifier()
+
+                if batch_idx % 10 == 0:
+                    print('Local Epoch-conv: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                        epoch, batch_idx * len(images), len(self.dataset_train.dataset),
+                              100. * batch_idx / len(self.dataset_train), loss.item()))
+                batch_loss.append(loss.item())
+            epoch_loss.append(sum(batch_loss) / len(batch_loss))
+        print(f'localEpochLoss-conv:{sum(epoch_loss) / len(epoch_loss)}')
+        return self.net.state_dict(), convs_FFT, sum(epoch_loss) / len(epoch_loss)
+
+    def train_fc(self, net_glob):
         self.net.train()
         net_glob.eval()
         # train and update
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
         epoch_loss = []
-        for iter in range(self.local_ep):
+        for epoch in range(self.local_ep):
             batch_loss = []
-            Spec_loss = 0
-            dist_loss = 0
             T = 2
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
-                self.net.zero_grad()
+                self.net.zero_grad()  # 清除梯度
+                self.net.freeze_feature_extractor()  # 冻结特征提取器
 
-                log_probs = self.net(images)
-                base_loss = self.loss_func(log_probs, labels)
-                w_FFT = spectral_cal(self.net)
+                output = self.net(images)
+                base_loss = self.loss_func(output, labels)
 
-                if w_FFT_glob is not None:
-                    # 全局低频谱对本地模型的谱蒸馏
-                    w_FFT = torch.tensor(w_FFT, dtype=torch.float)
-                    w_FFT_glob = torch.tensor(w_FFT_glob, dtype=torch.float)
-                    Spec_loss = self.loss_func_kl(w_FFT.log(), w_FFT_glob)
+                # 全局模型对本地模型的知识蒸馏
+                glob_probs = net_glob(images)
+                l_probs = F.log_softmax(output/T, dim=0)
+                g_probs = F.softmax(glob_probs/T, dim=0)
+                dist_loss = self.loss_func_kl(l_probs, g_probs)
 
-
-                    # 全局模型对本地模型的知识蒸馏
-                    glob_probs = net_glob(images)
-                    log_probs = F.log_softmax(log_probs/T, dim=0)
-                    glob_probs = F.softmax(glob_probs/T, dim=0)
-                    dist_loss = self.loss_func_kl(log_probs, glob_probs)
-
-                loss = base_loss + Spec_loss + dist_loss
+                loss = base_loss + dist_loss
                 loss.backward()
                 optimizer.step()
+                self.net.unfreeze_feature_extractor()
                 if batch_idx % 10 == 0:
-                    print('Local Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                        iter, batch_idx * len(images), len(self.dataset_train.dataset),
+                    print('Local Epoch-fc: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                        epoch, batch_idx * len(images), len(self.dataset_train.dataset),
                               100. * batch_idx / len(self.dataset_train), loss.item()))
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
-        print(f'localEpochLoss:{sum(epoch_loss) / len(epoch_loss)}')
-        return self.net.state_dict(), w_FFT, sum(epoch_loss) / len(epoch_loss)
+        print(f'localEpochLoss-fc:{sum(epoch_loss) / len(epoch_loss)}')
+        return self.net.state_dict(), sum(epoch_loss) / len(epoch_loss)
 
     def eval(self):
         self.net.eval()
@@ -87,8 +119,25 @@ class Client(object):
             test_loss, self.dataName, correct, len(self.dataset_test.dataset), accuracy))
         return accuracy, test_loss
 
-    def update_weight(self, weights):
-        self.net.load_state_dict(weights)
+    def get_conv_weight(self):
+        # 提取卷积层的权重
+        conv_weights = []
+        for name, param in self.net.named_parameters():
+            if 'conv' in name:  # 筛选出卷积层权重
+                conv_weights.append(param.data)
+        return conv_weights
+
+    def update_weight_conv(self, conv_weights):
+        with torch.no_grad():  # 不计算梯度
+            for idx, (name, param) in enumerate(self.net.named_parameters()):
+                if 'conv' in name:  # 筛选出卷积层权重
+                    param.data.copy_(conv_weights[idx])
+
+    def update_weight_classifier(self, fc_weights):
+        with torch.no_grad():  # 不计算梯度
+            for idx, (name, param) in enumerate(self.net.named_parameters()):
+                if 'fc' in name:  # 筛选出分类层权重
+                    param.data.copy_(fc_weights[idx])  # 根据索引加载权重
 
     def save(self):
         w = self.net.state_dict()

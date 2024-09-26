@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import torch.nn.functional as F
+from torch import nn
 
 
 def compute_fft_of_weights(weight_tensor):
@@ -24,12 +24,18 @@ def FFT_weights_cal(model):
     # List to store all FFT-transformed weights
     all_fft_weights = []
 
-    # Iterate through layers and compute FFT for layers with weights
-    for name, layer in model.named_modules():
-        if hasattr(layer, 'weight') and layer.weight is not None:
-            weight_tensor = layer.weight.data
+    if not isinstance(model, nn.Module):
+        for weight_tensor in model:
             fft_weights = compute_fft_of_weights(weight_tensor)
             all_fft_weights.extend(fft_weights)
+
+    else:
+        # Iterate through layers and compute FFT for layers with weights
+        for name, layer in model.named_modules():
+            if hasattr(layer, 'weight') and layer.weight is not None:
+                weight_tensor = layer.weight.data
+                fft_weights = compute_fft_of_weights(weight_tensor)
+                all_fft_weights.extend(fft_weights)
 
     # Convert the list to a numpy array
     all_fft_weights_array = np.array(all_fft_weights)
