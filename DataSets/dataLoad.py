@@ -117,10 +117,10 @@ class IMBALANCEDataset(Dataset):
             ])
 
             # 1. 读取MNIST数据集
-            train = MNIST(root=f'{dataDir}/mnist/', train=True, download=True, transform=transform)
-            test = MNIST(root=f'{dataDir}/mnist/', train=False, download=True, transform=transform)
-            # train = MNIST(root=f'{dataDir}/mnist-dataset/mnist/', train=True, download=True, transform=transform)
-            # test = MNIST(root=f'{dataDir}/mnist-dataset/mnist/', train=False, download=True, transform=transform)
+            # train = MNIST(root=f'{dataDir}/mnist/', train=True, download=True, transform=transform)
+            # test = MNIST(root=f'{dataDir}/mnist/', train=False, download=True, transform=transform)
+            train = MNIST(root=f'{dataDir}/mnist-dataset/mnist/', train=True, download=True, transform=transform)
+            test = MNIST(root=f'{dataDir}/mnist-dataset/mnist/', train=False, download=True, transform=transform)
 
         elif dataName == 'usps':
             normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -133,10 +133,10 @@ class IMBALANCEDataset(Dataset):
             ])
 
             # 2. 读取USPS数据集
-            train = USPS(root=f'{dataDir}/usps/', train=True, download=True, transform=transform)
-            test = USPS(root=f'{dataDir}/usps/', train=False, download=True, transform=transform)
-            # train = USPS(root=f'{dataDir}/usps-datas/usps/', train=True, download=True, transform=transform)
-            # test = USPS(root=f'{dataDir}/usps-datas/usps/', train=False, download=True, transform=transform)
+            # train = USPS(root=f'{dataDir}/usps/', train=True, download=True, transform=transform)
+            # test = USPS(root=f'{dataDir}/usps/', train=False, download=True, transform=transform)
+            train = USPS(root=f'{dataDir}/usps-datas/usps/', train=True, download=True, transform=transform)
+            test = USPS(root=f'{dataDir}/usps-datas/usps/', train=False, download=True, transform=transform)
 
 
         elif dataName == 'svhn':
@@ -149,10 +149,10 @@ class IMBALANCEDataset(Dataset):
             ])
 
             # 3. 读取SVHN数据集
-            train = SVHN(root=f'{dataDir}/svhn/', split='train', download=True, transform=transform)
-            test = SVHN(root=f'{dataDir}/svhn/', split='test', download=True, transform=transform)
-            # train = SVHN(root=f'{dataDir}/svhn-dataset/svhn/', split='train', download=True, transform=transform)
-            # test = SVHN(root=f'{dataDir}/svhn-dataset/svhn/', split='test', download=True, transform=transform)
+            # train = SVHN(root=f'{dataDir}/svhn/', split='train', download=True, transform=transform)
+            # test = SVHN(root=f'{dataDir}/svhn/', split='test', download=True, transform=transform)
+            train = SVHN(root=f'{dataDir}/svhn-dataset/svhn/', split='train', download=True, transform=transform)
+            test = SVHN(root=f'{dataDir}/svhn-dataset/svhn/', split='test', download=True, transform=transform)
 
         elif dataName == 'syn':
             normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -165,10 +165,10 @@ class IMBALANCEDataset(Dataset):
 
             # 4. 读取SYN数据集
             # 加载训练集和测试集
-            train_file = f'{dataDir}/syn/processed/synth_train.pt'
-            test_file = f'{dataDir}/syn/processed/synth_test.pt'
-            # train_file = f'{dataDir}/syn-dataset/syn/processed/synth_train.pt'
-            # test_file = f'{dataDir}/syn-dataset/syn/processed/synth_test.pt'
+            # train_file = f'{dataDir}/syn/processed/synth_train.pt'
+            # test_file = f'{dataDir}/syn/processed/synth_test.pt'
+            train_file = f'{dataDir}/syn-dataset/syn/processed/synth_train.pt'
+            test_file = f'{dataDir}/syn-dataset/syn/processed/synth_test.pt'
 
             train = SynDataset(train_file, transform=transform)
             test = SynDataset(test_file, transform=transform)

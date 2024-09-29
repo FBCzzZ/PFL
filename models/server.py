@@ -31,7 +31,7 @@ class Server(object):
         # 提取卷积层的权重
         conv_weights = []
         for name, param in self.net.named_parameters():
-            if 'conv' in name:  # 筛选出卷积层权重
+            if 'conv' in name or 'fc1' in name:  # 筛选出卷积层权重
                 conv_weights.append(param.data)
         return conv_weights
 

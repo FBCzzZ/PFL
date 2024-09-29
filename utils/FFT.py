@@ -50,3 +50,4 @@ def spectral_cal(model):
     prob_dist = torch.tensor(prob_dist, dtype=torch.float)
 
     return prob_dist
+

@@ -11,8 +11,8 @@ data_list = ['mnist', 'usps', 'svhn', 'syn']
 local_ep_list = [5, 15, 5, 2]
 client_list = []
 w_local_list = []
-convs_FFT_list = []
-convs_FFT_glob = None
+low_freq_spectrum_list = []
+low_freq_spectrum_glob = None
 client_class = []
 
 if __name__ == '__main__':
@@ -34,20 +34,20 @@ if __name__ == '__main__':
         client_list.append(Client(args, data_list[i], copy.deepcopy(server.net).to(args.device), local_ep_list[i], client_class[i]))
         print(f"client{i},数据集{data_list[i]}:{client_class[i]}")
         w_local_list.append(w_glob)
-        convs_FFT_list.append(None)
+        low_freq_spectrum_list.append(None)
 
     for epoch in range(args.epochs):
         for i in range(args.num_users):
             # client_list[i].update_weight_conv(server.get_conv_weight())
             # 冻结分类器，每个客户端进行特征提取器本地训练
             loss_locals = []
-            w, convs_FFT, loss = client_list[i].train_convs(convs_FFT_glob)
+            w, low_freq_spectrum, loss = client_list[i].train_convs(low_freq_spectrum_glob)
 
-            convs_FFT_list[i] = copy.deepcopy(convs_FFT)
+            low_freq_spectrum_list[i] = copy.deepcopy(low_freq_spectrum)
             w_local_list[i] = copy.deepcopy(w)
             loss_locals.append(copy.deepcopy(loss))
         # 聚合低频频谱
-        convs_FFT_glob = server.agg_spec(convs_FFT_list)
+        low_freq_spectrum_glob = server.agg_spec(low_freq_spectrum_list)
 
         # 聚合特征提取器
         w_avg = server.agg(w_local_list)
@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
         for i in range(args.num_users):
             # 下发特征提取器
-            client_list[i].update_weight_conv(server.get_conv_weight())
+            client_list[i].update_weight_ExFeature(server.get_conv_weight())
             # 训练分类器
             w, loss = client_list[i].train_fc(server.net)
 

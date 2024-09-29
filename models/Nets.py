@@ -38,9 +38,10 @@ class CNN(nn.Module):
         for param in self.conv2.parameters():
             param.requires_grad = False
 
-    def freeze_classifier(self):
         for param in self.fc1.parameters():
             param.requires_grad = False
+
+    def freeze_classifier(self):
         for param in self.fc2.parameters():
             param.requires_grad = False
         for param in self.fc3.parameters():
@@ -52,9 +53,11 @@ class CNN(nn.Module):
         for param in self.conv2.parameters():
             param.requires_grad = True
 
-    def unfreeze_classifier(self):
         for param in self.fc1.parameters():
             param.requires_grad = True
+
+    def unfreeze_classifier(self):
+
         for param in self.fc2.parameters():
             param.requires_grad = True
         for param in self.fc3.parameters():

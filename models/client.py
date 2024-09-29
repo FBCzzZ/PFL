@@ -4,7 +4,7 @@ import numpy as np
 from torch import nn
 import torch.nn.functional as F
 from DataSets.dataLoad import IMBALANCEDataset
-from utils.FFT import spectral_cal
+from utils.extract_spectrum import compute_frequency_spectrum, extract_low_freq
 
 
 class Client(object):
@@ -22,7 +22,7 @@ class Client(object):
         self.dataName = dataName
 
 
-    def train_convs(self, convs_FFT_glob):
+    def train_convs(self, low_freq_spectrum_glob):
         self.net.train()
         # train and update
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
@@ -31,6 +31,7 @@ class Client(object):
         for epoch in range(self.local_ep):
             batch_loss = []
             Spec_loss = 0
+            T = 2
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()  # 清除梯度
@@ -38,14 +39,21 @@ class Client(object):
 
                 output = self.net(images)
                 base_loss = self.loss_func(output, labels)
-                convs_FFT = spectral_cal(self.get_conv_weight())
-                convs_FFT = convs_FFT[:int(len(convs_FFT)/2)]
 
-                if convs_FFT_glob is not None:
+                spectrum = compute_frequency_spectrum(self.get_ExFeature_weight())
+                low_freq_spectrum = extract_low_freq(spectrum, 0.5)
+
+                if low_freq_spectrum_glob is not None:
                     # 全局低频谱对本地特征提取器的谱蒸馏
-                    l_probs = torch.tensor(convs_FFT, dtype=torch.float)
-                    g_probs = torch.tensor(convs_FFT_glob, dtype=torch.float)
-                    Spec_loss = self.loss_func_kl(l_probs.log(), g_probs)
+
+                    l_t = torch.tensor(low_freq_spectrum, dtype=torch.float)
+                    g_t = torch.tensor(low_freq_spectrum_glob, dtype=torch.float)
+
+                    l_probs = F.log_softmax(l_t / T, dim=0)
+                    g_probs = F.softmax(g_t / T, dim=0)
+
+                    Spec_loss = self.loss_func_kl(l_probs, g_probs)
+
 
                 loss = base_loss + Spec_loss
                 loss.backward()
@@ -59,7 +67,7 @@ class Client(object):
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
         print(f'localEpochLoss-conv:{sum(epoch_loss) / len(epoch_loss)}')
-        return self.net.state_dict(), convs_FFT, sum(epoch_loss) / len(epoch_loss)
+        return self.net.state_dict(), low_freq_spectrum, sum(epoch_loss) / len(epoch_loss)
 
     def train_fc(self, net_glob):
         self.net.train()
@@ -80,9 +88,9 @@ class Client(object):
                 base_loss = self.loss_func(output, labels)
 
                 # 全局模型对本地模型的知识蒸馏
-                glob_probs = net_glob(images)
+                g_output = net_glob(images)
                 l_probs = F.log_softmax(output/T, dim=0)
-                g_probs = F.softmax(glob_probs/T, dim=0)
+                g_probs = F.softmax(g_output/T, dim=0)
                 dist_loss = self.loss_func_kl(l_probs, g_probs)
 
                 loss = base_loss + dist_loss
@@ -119,18 +127,18 @@ class Client(object):
             test_loss, self.dataName, correct, len(self.dataset_test.dataset), accuracy))
         return accuracy, test_loss
 
-    def get_conv_weight(self):
+    def get_ExFeature_weight(self):
         # 提取卷积层的权重
         conv_weights = []
         for name, param in self.net.named_parameters():
-            if 'conv' in name:  # 筛选出卷积层权重
+            if 'conv' in name or 'fc1' in name:  # 筛选出卷积层权重
                 conv_weights.append(param.data)
         return conv_weights
 
-    def update_weight_conv(self, conv_weights):
+    def update_weight_ExFeature(self, conv_weights):
         with torch.no_grad():  # 不计算梯度
             for idx, (name, param) in enumerate(self.net.named_parameters()):
-                if 'conv' in name:  # 筛选出卷积层权重
+                if 'conv' in name or 'fc1' in name:  # 筛选出卷积层权重
                     param.data.copy_(conv_weights[idx])
 
     def update_weight_classifier(self, fc_weights):
@@ -141,5 +149,5 @@ class Client(object):
 
     def save(self):
         w = self.net.state_dict()
-        torch.save(w, f'{self.dataName}_model_state_dict.pth')
-        # torch.save(w, f'/kaggle/working/{self.dataName}_model_state_dict.pth')
+        # torch.save(w, f'{self.dataName}_model_state_dict.pth')
+        torch.save(w, f'/kaggle/working/{self.dataName}_model_state_dict.pth')
