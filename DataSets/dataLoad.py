@@ -2,33 +2,35 @@ import torch
 import torchvision.transforms as transforms
 import numpy as np
 from torchvision.datasets import MNIST, USPS, SVHN
-from DataSets.utils import SynDataset
+from DataSets.utils import SynDataset, MeterDigitDataset
 from torch.utils.data import Dataset
 
 def repeat_channels(x):
     return x.repeat(3, 1, 1)
 
 
-class IMBALANCEDataset(Dataset):
+class DatasetLoader(Dataset):
     def __init__(self, args, dataName, selected_classes=None):
         self.selected_classes = selected_classes
         self.train_dataset, self.test_dataset = self.get_dataLoad(dataDir=args.data_path, dataName=dataName)
-        self.cls_num = len(selected_classes)
+
 
         # 如果有指定的类别，则进行筛选
         if self.selected_classes:
+            self.cls_num = len(selected_classes)
             self.train_dataset = self.filter_classes(self.train_dataset, self.selected_classes)
 
-        np.random.seed(args.seed)
-        img_num_list = self.get_img_num_per_cls(args.imb_type, args.imb_factor)
-        print(f"数据集{dataName}类别分布：{img_num_list}")
-        imbl_data, imbl_target = self.gen_imbalanced_data(img_num_list)
+            np.random.seed(args.seed)
+            img_num_list = self.get_img_num_per_cls(args.imb_type, args.imb_factor)
+            print(f"数据集{dataName}类别分布：{img_num_list}")
+            imbl_data, imbl_target = self.gen_imbalanced_data(img_num_list)
 
-        # 使用生成的不平衡数据更新训练集
-        self.train_dataset = torch.utils.data.TensorDataset(torch.tensor(imbl_data, dtype=torch.float32),
-                                                            torch.tensor(imbl_target, dtype=torch.long))
+            # 使用生成的不平衡数据更新训练集
+            self.train_dataset = torch.utils.data.TensorDataset(torch.tensor(imbl_data, dtype=torch.float32),
+                                                                torch.tensor(imbl_target, dtype=torch.long))
 
-    def filter_classes(self, dataset, classes_to_keep):
+    @staticmethod
+    def filter_classes(dataset, classes_to_keep):
         """
         筛选数据集中只包含指定类别的数据
         """
@@ -105,7 +107,8 @@ class IMBALANCEDataset(Dataset):
             cls_num_list.append(self.num_per_cls_dict[i])
         return cls_num_list
 
-    def get_dataLoad(self, dataDir, dataName):
+    @staticmethod
+    def get_dataLoad(dataDir, dataName):
         if dataName == 'mnist':
             normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
             transform = transforms.Compose([
@@ -172,6 +175,25 @@ class IMBALANCEDataset(Dataset):
 
             train = SynDataset(train_file, transform=transform)
             test = SynDataset(test_file, transform=transform)
+
+        elif dataName == 'md':
+            normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transform = transforms.Compose([
+                # transforms.ToPILImage(),
+                transforms.Resize((32, 32)),
+                transforms.ToTensor(),
+                normalize
+            ])
+
+            # 4. 读取仪表数字数据集
+            # 加载训练集和测试集
+            # train_file = f'{dataDir}/meterdigits'
+            # test_file = f'{dataDir}/meterdigits'
+            train_file = f'{dataDir}/md-dataset/meterdigits'
+            test_file = f'{dataDir}/md-dataset/meterdigits'
+
+            train = MeterDigitDataset(train_file, transform=transform)
+            test = MeterDigitDataset(test_file, transform=transform)
 
         else:
             raise ValueError("Unsupported dataset: {}".format(dataName))

@@ -1,15 +1,26 @@
 import numpy as np
 import copy
 import torch
+from torch import nn
 from models.Nets import CNN
+import torch.nn.functional as F
+from DataSets.dataLoad import DatasetLoader
+
 
 class Server(object):
-    def __init__(self, args):
+    def __init__(self, args, dataName):
+        self.args = args
         if args.model == 'cnn':
             self.net = CNN().to(args.device)
         else:
             exit('Error: unrecognized model')
         print(self.net)
+        dataset = DatasetLoader(args, dataName)
+        self.dataset_train = torch.utils.data.DataLoader(dataset.train_dataset, batch_size=args.batch_size, shuffle=True)
+
+        self.loss_func = nn.CrossEntropyLoss()
+        self.loss_func_kl = nn.KLDivLoss(reduction="batchmean")
+        self.dataName = dataName
 
     @staticmethod
     def agg(w_list):

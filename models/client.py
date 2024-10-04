@@ -3,14 +3,14 @@ import copy
 import numpy as np
 from torch import nn
 import torch.nn.functional as F
-from DataSets.dataLoad import IMBALANCEDataset
+from DataSets.dataLoad import DatasetLoader
 from utils.extract_spectrum import compute_frequency_spectrum, extract_low_freq
 
 
 class Client(object):
     def __init__(self, args, dataName, net, local_ep, client_class):
         self.args = args
-        imbalance_dataset = IMBALANCEDataset(args, dataName, client_class)
+        imbalance_dataset = DatasetLoader(args, dataName, client_class)
 
         self.dataset_train = torch.utils.data.DataLoader(imbalance_dataset.train_dataset, batch_size=args.batch_size, shuffle=True)
         self.dataset_test = torch.utils.data.DataLoader(imbalance_dataset.test_dataset, batch_size=args.batch_size, shuffle=False)
@@ -32,10 +32,11 @@ class Client(object):
             batch_loss = []
             Spec_loss = 0
             T = 2
+            self.net.freeze_classifier()  # 冻结分类器
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()  # 清除梯度
-                self.net.freeze_classifier()  # 冻结分类器
+
 
                 output = self.net(images)
                 base_loss = self.loss_func(output, labels)
@@ -58,13 +59,13 @@ class Client(object):
                 loss = base_loss + Spec_loss
                 loss.backward()
                 optimizer.step()
-                self.net.unfreeze_classifier()
-
                 if batch_idx % 10 == 0:
                     print('Local Epoch-conv: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                         epoch, batch_idx * len(images), len(self.dataset_train.dataset),
                               100. * batch_idx / len(self.dataset_train), loss.item()))
                 batch_loss.append(loss.item())
+
+            self.net.unfreeze_classifier()
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
         print(f'localEpochLoss-conv:{sum(epoch_loss) / len(epoch_loss)}')
         return self.net.state_dict(), low_freq_spectrum, sum(epoch_loss) / len(epoch_loss)
@@ -79,11 +80,10 @@ class Client(object):
         for epoch in range(self.local_ep):
             batch_loss = []
             T = 2
+            self.net.freeze_feature_extractor()  # 冻结特征提取器
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()  # 清除梯度
-                self.net.freeze_feature_extractor()  # 冻结特征提取器
-
                 output = self.net(images)
                 base_loss = self.loss_func(output, labels)
 
@@ -96,13 +96,15 @@ class Client(object):
                 loss = base_loss + dist_loss
                 loss.backward()
                 optimizer.step()
-                self.net.unfreeze_feature_extractor()
+
                 if batch_idx % 10 == 0:
                     print('Local Epoch-fc: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                         epoch, batch_idx * len(images), len(self.dataset_train.dataset),
                               100. * batch_idx / len(self.dataset_train), loss.item()))
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
+
+        self.net.unfreeze_feature_extractor()
         print(f'localEpochLoss-fc:{sum(epoch_loss) / len(epoch_loss)}')
         return self.net.state_dict(), sum(epoch_loss) / len(epoch_loss)
 

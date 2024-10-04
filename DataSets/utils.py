@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 import numpy as np
+import os
+from PIL import Image
 
 
 def non_iid_sampling(args):
@@ -49,5 +51,47 @@ class SynDataset(Dataset):
             image = image.numpy() if isinstance(image, torch.Tensor) else image
             image = self.transform(image)  # 应用变换
         return image, label
+
+
+class MeterDigitDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        """
+        Args:
+            root_dir (string): 数据集根目录，包含按标签命名的文件夹。
+            transform (callable, optional): 可选的转换函数。
+        """
+        self.root_dir = root_dir
+        self.transform = transform
+        self.images = []
+        self.labels = []
+
+        # 遍历根目录下的每个标签文件夹
+        for label in os.listdir(root_dir):
+            label_dir = os.path.join(root_dir, label)
+            if os.path.isdir(label_dir):
+                # 遍历标签文件夹中的每个图像文件
+                for img_file in os.listdir(label_dir):
+                    img_path = os.path.join(label_dir, img_file)
+                    if img_file.endswith('.png') or img_file.endswith('.jpg'):  # 仅支持 png 和 jpg 文件
+                        self.images.append(img_path)
+                        self.labels.append(int(label))  # 将标签转为整数
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img_path = self.images[idx]
+        label = self.labels[idx]
+
+        # 加载图像
+        image = Image.open(img_path).convert("RGB")
+
+        # 应用转换（如果有的话）
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
+
+
 
 

@@ -1,13 +1,13 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from DataSets.dataLoad import IMBALANCEDataset
+from DataSets.dataLoad import DatasetLoader
 
 
 class Client(object):
     def __init__(self, args, dataName, net, local_ep, client_class):
         self.args = args
-        imbalance_dataset = IMBALANCEDataset(args, dataName, client_class)
+        imbalance_dataset = DatasetLoader(args, dataName, client_class)
 
         self.dataset_train = torch.utils.data.DataLoader(imbalance_dataset.train_dataset, batch_size=args.batch_size,
                                                          shuffle=True)
