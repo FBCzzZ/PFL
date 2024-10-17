@@ -5,13 +5,25 @@ from torch import nn
 
 def compute_frequency_spectrum(model):
     weights = []
-    if not isinstance(model, nn.Module):
+
+    # 如果传入的是权重字典 (self.get_ExFeature_weight 返回)
+    if isinstance(model, dict):
+        for key, weight in model.items():
+            weights.append(weight.cpu().numpy().flatten())  # 展平并转换为 numpy 数组
+        weights = np.concatenate(weights)
+
+    # 如果传入的是权重列表
+    elif isinstance(model, list):
         weights = torch.cat([w.view(-1) for w in model]).cpu().numpy()  # 展平并拼接
 
-    else:
+    # 如果传入的是 nn.Module 模型
+    elif isinstance(model, nn.Module):
         for param in model.parameters():
             weights.append(param.data.cpu().numpy().flatten())
         weights = np.concatenate(weights)
+
+    else:
+        raise TypeError("Input must be a dict, list of weights, or a PyTorch model.")
 
     # 计算傅里叶变换
     frequency_spectrum = np.fft.fft(weights)

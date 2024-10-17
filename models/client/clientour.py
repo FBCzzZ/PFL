@@ -1,26 +1,11 @@
 import torch
-import copy
-import numpy as np
-from torch import nn
 import torch.nn.functional as F
-from DataSets.dataLoad import DatasetLoader
 from utils.extract_spectrum import compute_frequency_spectrum, extract_low_freq
+from models.client.clientbase import Clientbase
 
-
-class Client(object):
-    def __init__(self, args, dataName, net, local_ep, client_class):
-        self.args = args
-        imbalance_dataset = DatasetLoader(args, dataName, client_class)
-
-        self.dataset_train = torch.utils.data.DataLoader(imbalance_dataset.train_dataset, batch_size=args.batch_size, shuffle=True)
-        self.dataset_test = torch.utils.data.DataLoader(imbalance_dataset.test_dataset, batch_size=args.batch_size, shuffle=False)
-
-        self.net = net
-        self.local_ep = local_ep
-        self.loss_func = nn.CrossEntropyLoss()
-        self.loss_func_kl = nn.KLDivLoss(reduction="batchmean")
-        self.dataName = dataName
-
+class Clientour(Clientbase):
+    def __init__(self, args, id, net, local_ep):
+        super().__init__(args, id, net, local_ep)
 
     def train_convs(self, low_freq_spectrum_glob):
         self.net.train()
@@ -68,7 +53,7 @@ class Client(object):
             self.net.unfreeze_classifier()
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
         print(f'localEpochLoss-conv:{sum(epoch_loss) / len(epoch_loss)}')
-        return self.net.state_dict(), low_freq_spectrum, sum(epoch_loss) / len(epoch_loss)
+        return self.get_ExFeature_weight(), low_freq_spectrum, sum(epoch_loss) / len(epoch_loss)
 
     def train_fc(self, net_glob):
         self.net.train()
@@ -93,7 +78,7 @@ class Client(object):
                 g_probs = F.softmax(g_output/T, dim=0)
                 dist_loss = self.loss_func_kl(l_probs, g_probs)
 
-                loss = base_loss + dist_loss
+                loss = base_loss + dist_loss*0
                 loss.backward()
                 optimizer.step()
 
@@ -106,50 +91,30 @@ class Client(object):
 
         self.net.unfreeze_feature_extractor()
         print(f'localEpochLoss-fc:{sum(epoch_loss) / len(epoch_loss)}')
-        return self.net.state_dict(), sum(epoch_loss) / len(epoch_loss)
-
-    def eval(self):
-        self.net.eval()
-        # testing
-        test_loss = 0
-        correct = 0
-        for idx, (data, target) in enumerate(self.dataset_test):
-            if self.args.gpu != -1:
-                data, target = data.cuda(), target.cuda()
-            log_probs = self.net(data)
-            # sum up batch loss
-            test_loss += F.cross_entropy(log_probs, target, reduction='sum').item()
-            # get the index of the max log-probability
-            y_pred = log_probs.data.max(1, keepdim=True)[1]
-            correct += y_pred.eq(target.data.view_as(y_pred)).long().cpu().sum()
-
-        test_loss /= len(self.dataset_test.dataset)
-        accuracy = 100.00 * correct / len(self.dataset_test.dataset)
-        print('\nTest set: Average loss: {:.4f} \n{}_Accuracy: {}/{} ({:.2f}%)\n'.format(
-            test_loss, self.dataName, correct, len(self.dataset_test.dataset), accuracy))
-        return accuracy, test_loss
+        return self.get_cla_weight(), sum(epoch_loss) / len(epoch_loss)
 
     def get_ExFeature_weight(self):
-        # 提取卷积层的权重
-        conv_weights = []
+        conv_weights = {}
         for name, param in self.net.named_parameters():
-            if 'conv' in name or 'fc1' in name:  # 筛选出卷积层权重
-                conv_weights.append(param.data)
+            if 'conv' in name or 'fc1' in name or 'fc2' in name:
+                conv_weights[name] = param.data
         return conv_weights
 
+    def get_cla_weight(self):
+        cla_weights = {}
+        for name, param in self.net.named_parameters():
+            if 'fc3' in name:
+                cla_weights[name] = param.data
+        return cla_weights
+
     def update_weight_ExFeature(self, conv_weights):
-        with torch.no_grad():  # 不计算梯度
-            for idx, (name, param) in enumerate(self.net.named_parameters()):
-                if 'conv' in name or 'fc1' in name:  # 筛选出卷积层权重
-                    param.data.copy_(conv_weights[idx])
+        with torch.no_grad():
+            for name, param in self.net.named_parameters():
+                if 'conv' in name or 'fc1' in name or 'fc2' in name:
+                    param.data.copy_(conv_weights[name])
 
     def update_weight_classifier(self, fc_weights):
-        with torch.no_grad():  # 不计算梯度
-            for idx, (name, param) in enumerate(self.net.named_parameters()):
-                if 'fc' in name:  # 筛选出分类层权重
-                    param.data.copy_(fc_weights[idx])  # 根据索引加载权重
-
-    def save(self):
-        w = self.net.state_dict()
-        # torch.save(w, f'{self.dataName}_model_state_dict.pth')
-        torch.save(w, f'/kaggle/working/{self.dataName}_model_state_dict.pth')
+        with torch.no_grad():
+            for name, param in self.net.named_parameters():
+                if 'fc3' in name:
+                    param.data.copy_(fc_weights[name])

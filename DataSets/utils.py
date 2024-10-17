@@ -3,54 +3,8 @@ from torch.utils.data import Dataset
 import numpy as np
 import os
 from PIL import Image
-
-
-def non_iid_sampling(args):
-    np.random.seed(args.seed)
-    Phi = np.random.binomial(1, args.p,
-                             size=(args.num_users, args.num_classes))  # indicate the classes chosen by each client
-    n_classes_per_client = np.sum(Phi, axis=1)
-    n_client_per_class = np.sum(Phi, axis=0)
-
-    # 检查是否有客户端没有选择任何类别，或者有类别未被任何客户端选择
-    while np.min(n_classes_per_client) == 0 or np.min(n_client_per_class) == 0:
-        # 修正客户端没有选择任何类别的情况
-        invalid_idx = np.where(n_classes_per_client == 0)[0]
-        Phi[invalid_idx] = np.random.binomial(1, args.p, size=(len(invalid_idx), args.num_classes))
-        n_classes_per_client = np.sum(Phi, axis=1)
-
-        # 修正类别未被任何客户端选择的情况
-        missing_classes = np.where(n_client_per_class == 0)[0]
-        for missing_class in missing_classes:
-            # 随机选择一个客户端为其分配该类别
-            random_client = np.random.choice(args.num_users)
-            Phi[random_client, missing_class] = 1
-
-        n_client_per_class = np.sum(Phi, axis=0)
-
-    # 生成每个客户端选择的类别列表
-    Psi = [list(np.where(Phi[i, :] == 1)[0]) for i in
-           range(args.num_users)]  # indicate the clients that choose each class
-
-    return Psi
-
-
-class SynDataset(Dataset):
-    def __init__(self, file_path, transform=None):
-        self.images, self.labels  = torch.load(file_path)  # 加载.pt文件
-        self.transform = transform  # 可选的图像变换
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        image = self.images[idx]
-        label = self.labels[idx]
-
-        if self.transform:
-            image = image.numpy() if isinstance(image, torch.Tensor) else image
-            image = self.transform(image)  # 应用变换
-        return image, label
+import torchvision.transforms as transforms
+import torchvision
 
 
 class MeterDigitDataset(Dataset):
@@ -93,5 +47,78 @@ class MeterDigitDataset(Dataset):
         return image, label
 
 
+class DatasetLoader(Dataset):
+    def __init__(self, args, type, id=None):
+        self.dataDir = args.data_path
+        self.dataName = args.dataName
+        self.batch_size = args.batch_size
 
+        if type == 'server':
+            self.train_dataset, self.test_dataset = self.get_dataLoad()
+
+        elif type == 'client':
+            self.id = id
+            self.train_dataset = self.read_client_data(is_train=True)
+            self.test_dataset = self.read_client_data(is_train=False)
+
+    def get_dataLoad(self):
+        train = None
+        test = None
+        if self.dataName == 'Cifar10':
+            normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+            transform = transforms.Compose([
+                # transforms.ToPILImage(),
+                transforms.Resize((32, 32)),
+                transforms.ToTensor(),
+                normalize
+            ])
+
+            # 4. 读取仪表数字数据集
+            # 加载训练集
+            # train_file = f'{self.dataDir}/meterdigits'
+            train_file = f'{self.dataDir}/md-dataset/meterdigits'
+
+            train = MeterDigitDataset(train_file, transform=transform)
+
+            transform = transforms.Compose(
+                [transforms.ToTensor(), normalize])
+            test = torchvision.datasets.CIFAR10(root=self.dataDir +
+                                         "/cifar10/Cifar10/rawdata", train=False, download=True, transform=transform)
+            # test = torchvision.datasets.CIFAR10(root=self.dataDir +
+            #                              "/Cifar10/rawdata", train=False, download=True, transform=transform)
+
+        train_loader = torch.utils.data.DataLoader(train, self.batch_size, shuffle=False)
+        test_loader = torch.utils.data.DataLoader(test, self.batch_size, shuffle=False)
+
+        return train_loader, test_loader
+
+    def read_data(self, is_train=True):
+        dataPath = f'{self.dataDir}/cifar10-dir0-1'
+        # dataPath = f'{self.dataDir}'
+        if is_train:
+            train_data_dir = os.path.join(dataPath, self.dataName, 'train/')
+
+            train_file = train_data_dir + str(self.id) + '.npz'
+            with open(train_file, 'rb') as f:
+                train_data = np.load(f, allow_pickle=True)['data'].tolist()
+
+            return train_data
+
+        else:
+            test_data_dir = os.path.join(dataPath, self.dataName, 'test/')
+
+            test_file = test_data_dir + str(self.id) + '.npz'
+            with open(test_file, 'rb') as f:
+                test_data = np.load(f, allow_pickle=True)['data'].tolist()
+
+            return test_data
+
+    def read_client_data(self, is_train):
+        data = self.read_data(is_train)
+        X = torch.Tensor(data['x']).type(torch.float32)
+        Y = torch.Tensor(data['y']).type(torch.int64)
+
+        data = [(x, y) for x, y in zip(X, Y)]
+
+        return torch.utils.data.DataLoader(data, self.batch_size, drop_last=False, shuffle=False)
 

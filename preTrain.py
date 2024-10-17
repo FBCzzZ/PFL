@@ -3,7 +3,7 @@ import torch
 
 from options import args_parser
 from models.Nets import CNN
-from models.client_fedAvg import Client
+from models.client.clientavg import Client
 
 data_list = ['mnist', 'usps', 'svhn', 'syn']
 local_ep_list = [50, 150, 50, 20]
