@@ -10,12 +10,12 @@ from models.client.clientbase import Clientbase
 class Clientour(Clientbase):
     def __init__(self, args, id, net, local_ep):
         super().__init__(args, id, net, local_ep)
-        # 初始化标签分布字典，结构为{label: {'mean': tensor, 'var': tensor, 'count': int}}
-        self.feature_distributions = {}
-
-
+        self.feature_distributions = None
 
     def train_convs(self, low_freq_spectrum_g):
+        # 初始化标签分布字典，结构为{label: {'mean': [], 'var': [], 'count': int}}
+        self.feature_distributions = {}
+        
         self.net.train()
         # train and update
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
@@ -29,21 +29,21 @@ class Clientour(Clientbase):
             Spec_loss = 0
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
-                # if len(labels) < self.args.batch_size:
-                #     # 获取缺少的数据量
-                #     missing_count = self.args.batch_size - len(labels)
-                #
-                #     # 从已有的样本中随机采样补全
-                #     indices = random.sample(range(len(self.dataset_train.dataset)), missing_count)
-                #     sampled_images, sampled_labels = zip(*[self.dataset_train.dataset[i] for i in indices])
-                #
-                #     # 将采样的数据转移到设备并添加到当前 batch 中
-                #     sampled_images = torch.stack([img.to(self.args.device) for img in sampled_images])
-                #     sampled_labels = torch.tensor(sampled_labels, device=self.args.device)
-                #
-                #     # 将采样到的图像和标签添加到当前 batch
-                #     images = torch.cat([images, sampled_images], dim=0)
-                #     labels = torch.cat([labels, sampled_labels], dim=0)
+                if len(labels) < self.args.batch_size:
+                    # 获取缺少的数据量
+                    missing_count = self.args.batch_size - len(labels)
+
+                    # 从已有的样本中随机采样补全
+                    indices = random.sample(range(len(self.dataset_train.dataset)), missing_count)
+                    sampled_images, sampled_labels = zip(*[self.dataset_train.dataset[i] for i in indices])
+
+                    # 将采样的数据转移到设备并添加到当前 batch 中
+                    sampled_images = torch.stack([img.to(self.args.device) for img in sampled_images])
+                    sampled_labels = torch.tensor(sampled_labels, device=self.args.device)
+
+                    # 将采样到的图像和标签添加到当前 batch
+                    images = torch.cat([images, sampled_images], dim=0)
+                    labels = torch.cat([labels, sampled_labels], dim=0)
 
                 self.net.zero_grad()  # 清除梯度
 
@@ -63,34 +63,15 @@ class Clientour(Clientbase):
                     # 如果标签是新标签，初始化均值和方差
                     if label.item() not in self.feature_distributions:
                         self.feature_distributions[label.item()] = {
-                            'mean': batch_mean,
-                            'var': batch_var,
-                            'count': batch_count
+                            'mean': [],
+                            'var': [],
+                            'count': []
                         }
-                    else:
-                        # 获取已存储的分布统计
-                        prev_mean = self.feature_distributions[label.item()]['mean']
-                        prev_var = self.feature_distributions[label.item()]['var']
-                        prev_count = self.feature_distributions[label.item()]['count']
 
-                        # 计算新的样本总数
-                        total_count = prev_count + batch_count
-
-                        # 更新均值 (逐步平均更新)
-                        updated_mean = (prev_mean * prev_count + batch_mean * batch_count) / total_count
-
-                        # 使用Welford's method计算合并方差
-                        updated_var = (
-                                (prev_var * prev_count + batch_var * batch_count) / total_count +
-                                (prev_mean - batch_mean).pow(2) * prev_count * batch_count / total_count ** 2
-                        )
-
-                        # 更新标签特征的分布统计
-                        self.feature_distributions[label.item()] = {
-                            'mean': updated_mean,
-                            'var': updated_var,
-                            'count': total_count
-                        }
+                    # 存储分布统计
+                    self.feature_distributions[label.item()]['mean'].append(batch_mean)
+                    self.feature_distributions[label.item()]['var'].append(batch_var)
+                    self.feature_distributions[label.item()]['count'].append(batch_count)
 
 
                 output = self.net(images, with_classify=True)
@@ -121,6 +102,32 @@ class Clientour(Clientbase):
                         epoch, batch_idx * len(images), len(self.dataset_train.dataset),
                               100. * batch_idx / len(self.dataset_train), loss.item()))
                 batch_loss.append(loss.item())
+
+        for label, stats in self.feature_distributions.items():
+            # 提取该标签下所有 batch 的均值、方差和样本数列表
+            mean_list = stats['mean']
+            var_list = stats['var']
+            count_list = stats['count']
+
+            # 计算总体的样本数
+            total_count = sum(count_list)
+
+            # 计算全局均值
+            weighted_means = [mean * count for mean, count in zip(mean_list, count_list)]
+            global_mean = sum(weighted_means) / total_count
+
+            # 计算全局方差 (基于Welford's方法)
+            squared_diffs = [
+                var * count + (mean - global_mean).pow(2) * count
+                for var, mean, count in zip(var_list, mean_list, count_list)
+            ]
+            global_var = sum(squared_diffs) / total_count
+            # 存储最终结果
+            self.feature_distributions[label] = {
+                'mean': [global_mean],
+                'var': [global_var],
+                'count': total_count
+            }
 
         self.net.unfreeze_classifier()
         epoch_loss.append(sum(batch_loss) / len(batch_loss))

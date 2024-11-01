@@ -58,7 +58,7 @@ class Serverour(Serverbase):
 
     def generate_feature(self):
         # 定义每个标签生成的伪特征数量
-        num_samples_per_label = 100
+        num_samples_per_label = 1000
 
         # 用于存储生成的伪特征
         pseudo_features = {label: [] for label in self.global_feature_distributions.keys()}
@@ -84,8 +84,8 @@ class Serverour(Serverbase):
     def update_distributions(self, client_distributions):
         # 对每个标签的特征分布进行动量更新
         for label, client_stats in client_distributions.items():
-            client_mean = client_stats['mean']
-            client_var = client_stats['var']
+            client_mean = client_stats['mean'][0]
+            client_var = client_stats['var'][0]
 
             # 初始化标签统计量
             if label not in self.global_feature_distributions:
@@ -93,7 +93,7 @@ class Serverour(Serverbase):
                     'mean': client_mean,
                     'var': client_var
                 }
-            else:
+
                 # 使用动量进行更新
                 self.global_feature_distributions[label]['mean'] = (
                         self.momentum * self.global_feature_distributions[label]['mean'] + (1 - self.momentum) * client_mean
