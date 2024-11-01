@@ -3,16 +3,14 @@ import torch
 from options import args_parser
 from models.client.clientour import Clientour
 from models.server.serverour import Serverour
-import torch.nn.functional as F
 
 
-glob_ep = 1
 client_list = []
 ExFeature_w_local = []
 cla_w_local = []
-client_class = []
 E_list = []
 V_list = []
+low_freq_spectrum_g = None
 
 if __name__ == '__main__':
     # parse args
@@ -32,37 +30,27 @@ if __name__ == '__main__':
         cla_w_local.append(None)
 
     for c in range(args.epochs):
-
+        low_freq_spectrum_l = []
         for i in range(args.num_users):
+            # 下发共享头部
+            client_list[i].update_weight_classifier(server.get_cla_weight())
             # 冻结分类器，每个客户端进行特征提取器本地训练
             loss_locals = []
-            w, loss = client_list[i].train_convs(server)
+            low_freq_spectrum, w, loss = client_list[i].train_convs(low_freq_spectrum_g)
+            low_freq_spectrum_l.append(low_freq_spectrum)
 
             ExFeature_w_local[i] = copy.deepcopy(w)
             loss_locals.append(copy.deepcopy(loss))
 
-            E_list.append(client_list[i].E)
-            V_list.append(client_list[i].V)
+            # 更新全局分布
+            server.update_distributions(client_list[i].feature_distributions)
 
-        server.agg_E_V(E_list, V_list)
-
-        for i in range(args.num_users):
-            # 下发特征提取器
-            client_list[i].update_weight_ExFeature(server.get_ExFeature_weight())
-            # 训练分类器
-            w, loss = client_list[i].train_fc(server, copy.deepcopy(client_list))
-            cla_w_local[i] = copy.deepcopy(w)
             client_list[i].eval()
 
+        low_freq_spectrum_g = server.agg_spec(low_freq_spectrum_l)
 
-        # 聚合特征提取器
-        w_avg_ExFeature = server.average_weights_dict(ExFeature_w_local)
-        server.update_weight_ExFeature(w_avg_ExFeature)
-
-        # 聚合分类器
-        w_avg_cla = server.agg_cla_Momentum(cla_w_local)
-        server.update_weight_classifier(w_avg_cla)
-
+        # 训练公共头部分类器
+        server.train_fc()
 
         server.eval()
 

@@ -21,18 +21,16 @@ class CNN(nn.Module):
 
     def forward(self, x, with_classify=True, just_classify=False):
         if just_classify:
-            x = F.relu(self.fc1(x))
-            x = F.relu(self.fc2(x))
             x = self.fc3(x)
             return x
 
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
 
-        x1 = x.view(-1, 16 * 8 * 8)
-        x = F.relu(self.fc1(x1))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = x.view(-1, 16 * 8 * 8)
+        x = F.relu(self.fc1(x))
+        x1 = F.relu(self.fc2(x))
+        x = self.fc3(x1)
         if with_classify:
             return x
         else:
@@ -44,12 +42,14 @@ class CNN(nn.Module):
         for param in self.conv2.parameters():
             param.requires_grad = False
 
-
-    def freeze_classifier(self):
         for param in self.fc1.parameters():
             param.requires_grad = False
         for param in self.fc2.parameters():
             param.requires_grad = False
+
+
+    def freeze_classifier(self):
+
         for param in self.fc3.parameters():
             param.requires_grad = False
 
@@ -60,11 +60,13 @@ class CNN(nn.Module):
         for param in self.conv2.parameters():
             param.requires_grad = True
 
-
-    def unfreeze_classifier(self):
         for param in self.fc1.parameters():
             param.requires_grad = True
         for param in self.fc2.parameters():
             param.requires_grad = True
+
+
+    def unfreeze_classifier(self):
+
         for param in self.fc3.parameters():
             param.requires_grad = True

@@ -4,7 +4,8 @@ import argparse
 def args_parser():
     parser = argparse.ArgumentParser()
     # federated arguments
-    parser.add_argument('--epochs', type=int, default=300, help="rounds of training")
+    parser.add_argument('--epochs', type=int, default=100, help="rounds of training")
+    parser.add_argument('--g_ep', type=int, default=5, help="rounds of globTraining")
     parser.add_argument('--num_users', type=int, default=20, help="number of users: K")
     parser.add_argument('--lr', type=float, default=0.01, help="learning rate")
     parser.add_argument('--momentum', type=float, default=0.5, help="SGD momentum (default: 0.5)")
