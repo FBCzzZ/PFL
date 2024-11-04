@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import random
 from models.server.serverbase import Serverbase
 
 
@@ -13,12 +14,12 @@ class Serverour(Serverbase):
         self.lr = 0.01
 
 
-    def train_fc(self):
+    def train_fc(self, global_correct_per_label, global_total_per_label):
         self.net.train()
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
         # 生成伪特征
-        pseudo_features = self.generate_feature()
+        pseudo_features = self.generate_feature(global_correct_per_label, global_total_per_label)
 
         # 将伪特征和标签转换为训练数据
         X = torch.cat(list(pseudo_features.values()), dim=0)  # 所有伪特征
@@ -56,9 +57,21 @@ class Serverour(Serverbase):
         return self.get_cla_weight(), sum(epoch_loss) / len(epoch_loss)
 
 
-    def generate_feature(self):
+    def generate_feature(self, global_correct_per_label, global_total_per_label):
         # 定义每个标签生成的伪特征数量
-        num_samples_per_label = 1000
+        base_sample_size = 1000
+
+        samples_per_label = {}
+        # 计算全局标签正确率
+        for label in global_total_per_label:
+            if global_total_per_label[label] > 0:
+                accuracy = global_correct_per_label[label] / global_total_per_label[label]
+            else:
+                accuracy = 0.0
+
+            samples_per_label[label] = int(base_sample_size * (1 - accuracy) * random.uniform(0.8, 1.2))
+
+
 
         # 用于存储生成的伪特征
         pseudo_features = {label: [] for label in self.global_feature_distributions.keys()}
@@ -70,7 +83,7 @@ class Serverour(Serverbase):
             std_dev = torch.sqrt(var+ 1e-6)  # 标准差为方差的平方根
 
             # 逐个生成伪特征
-            for _ in range(num_samples_per_label):
+            for _ in range(samples_per_label[label]):
                 sample = torch.normal(mean=mean, std=std_dev).clone()
                 pseudo_features[label].append(sample.unsqueeze(0))  # 添加一个维度以保持一致性
 

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import copy
 import torch.nn.functional as F
-
+from collections import defaultdict
 from utils.extract_spectrum import compute_frequency_spectrum, extract_low_freq
 from models.client.clientbase import Clientbase
 
@@ -178,6 +178,49 @@ class Clientour(Clientbase):
         self.net.unfreeze_feature_extractor()
         print(f'localEpochLoss-fc:{sum(epoch_loss) / len(epoch_loss)}')
         return self.get_cla_weight(), sum(epoch_loss) / len(epoch_loss)
+
+
+    def eval(self):
+        self.net.eval()
+        test_loss = 0
+        correct = 0
+        # 初始化每个标签的正确个数和总数
+        correct_per_label = defaultdict(int)
+        total_per_label = defaultdict(int)
+
+        for idx, (data, target) in enumerate(self.dataset_test):
+            if self.args.gpu != -1:
+                data, target = data.cuda(), target.cuda()
+            log_probs = self.net(data)
+            # 计算损失
+            test_loss += F.cross_entropy(log_probs, target, reduction='sum').item()
+            # 获取预测结果
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+
+            # 计算总体正确个数
+            correct += y_pred.eq(target.data.view_as(y_pred)).long().cpu().sum()
+
+            # 统计每个标签的正确个数和总数
+            for i in range(len(target)):
+                label = target[i].item()
+                total_per_label[label] += 1
+                if y_pred[i].item() == label:
+                    correct_per_label[label] += 1
+
+        test_loss /= len(self.dataset_test.dataset)
+        accuracy = 100.00 * correct / len(self.dataset_test.dataset)
+
+        # 输出每个标签的正确率
+        for label in sorted(total_per_label.keys()):
+            label_accuracy = 100.00 * correct_per_label[label] / total_per_label[label]
+            print(
+                f'Label {label}: Accuracy: {label_accuracy:.2f}% ({correct_per_label[label]}/{total_per_label[label]})')
+
+        print('\nTest set: Average loss: {:.4f} \n{}_Accuracy: {}/{} ({:.2f}%)\n'.format(
+            test_loss, self.args.dataName + str(self.id), correct, len(self.dataset_test.dataset), accuracy))
+
+        return accuracy, test_loss, correct_per_label, total_per_label
+
 
     def get_ExFeature_weight(self):
         conv_weights = {}

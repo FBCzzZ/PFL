@@ -1,6 +1,7 @@
 import copy
 import torch
 from options import args_parser
+from collections import defaultdict
 from models.client.clientour import Clientour
 from models.server.serverour import Serverour
 
@@ -11,6 +12,7 @@ cla_w_local = []
 E_list = []
 V_list = []
 low_freq_spectrum_g = None
+
 
 if __name__ == '__main__':
     # parse args
@@ -31,9 +33,9 @@ if __name__ == '__main__':
 
     for c in range(args.epochs):
         low_freq_spectrum_l = []
+        global_correct_per_label = defaultdict(int)
+        global_total_per_label = defaultdict(int)
         for i in range(args.num_users):
-            # 下发共享头部
-            client_list[i].update_weight_classifier(server.get_cla_weight())
             # 冻结分类器，每个客户端进行特征提取器本地训练
             loss_locals = []
             low_freq_spectrum, w, loss = client_list[i].train_convs(low_freq_spectrum_g)
@@ -45,12 +47,20 @@ if __name__ == '__main__':
             # 更新全局分布
             server.update_distributions(client_list[i].feature_distributions)
 
-            client_list[i].eval()
+            _, _ , correct_per_label, total_per_label = client_list[i].eval()
+
+            for label in total_per_label:
+                global_total_per_label[label] += total_per_label[label]
+                global_correct_per_label[label] += correct_per_label[label]
 
         low_freq_spectrum_g = server.agg_spec(low_freq_spectrum_l)
 
         # 训练公共头部分类器
-        server.train_fc()
+        server.train_fc(global_correct_per_label, global_total_per_label)
+
+        for i in range(args.num_users):
+            # 下发共享头部
+            client_list[i].update_weight_classifier(server.get_cla_weight())
 
         server.eval()
 
