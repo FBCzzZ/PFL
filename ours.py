@@ -8,10 +8,10 @@ from models.server.serverour import Serverour
 
 client_list = []
 ExFeature_w_local = []
-cla_w_local = []
 E_list = []
 V_list = []
 low_freq_spectrum_g = None
+
 
 
 if __name__ == '__main__':
@@ -29,20 +29,23 @@ if __name__ == '__main__':
     for i in range(args.num_users):
         client_list.append(Clientour(args, i, copy.deepcopy(server.net).to(args.device), 1))
         ExFeature_w_local.append(None)
-        cla_w_local.append(None)
 
     for c in range(args.epochs):
         low_freq_spectrum_l = []
+        cla_w_local = []
         global_correct_per_label = defaultdict(int)
         global_total_per_label = defaultdict(int)
         for i in range(args.num_users):
             # 冻结分类器，每个客户端进行特征提取器本地训练
+            client_list[i].update_weight_ExFeature(server.get_ExFeature_weight()) # 下发公共特征提取器
             loss_locals = []
-            low_freq_spectrum, w, loss = client_list[i].train_convs(low_freq_spectrum_g)
+            low_freq_spectrum, loss = client_list[i].train_convs(low_freq_spectrum_g)
             low_freq_spectrum_l.append(low_freq_spectrum)
 
-            ExFeature_w_local[i] = copy.deepcopy(w)
+            ExFeature_w_local[i] = copy.deepcopy(client_list[i].get_ExFeature_weight())
             loss_locals.append(copy.deepcopy(loss))
+
+            cla_w_local.append(copy.deepcopy(client_list[i].get_cla_weight()))
 
             # 更新全局分布
             server.update_distributions(client_list[i].feature_distributions)
@@ -55,12 +58,27 @@ if __name__ == '__main__':
 
         low_freq_spectrum_g = server.agg_spec(low_freq_spectrum_l)
 
-        # 训练公共头部分类器
-        server.train_fc(global_correct_per_label, global_total_per_label)
+
+        glob_weight_ExFeature = server.average_weights_dict(ExFeature_w_local)
+        server.update_weight_ExFeature(glob_weight_ExFeature)
+
+        server.agg_cla_mom(cla_w_local)
+
+        pseudo_features = server.generate_feature(global_correct_per_label, global_total_per_label)
+        # 将伪特征和标签转换为训练数据
+        X = torch.cat(list(pseudo_features.values()), dim=0)  # 所有伪特征
+        y = torch.cat([torch.full((features.size(0),), label) for label, features in pseudo_features.items()])  # 标签
+
+        # 创建数据集和数据加载器
+        dataset = torch.utils.data.TensorDataset(X, y)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True)
+
 
         for i in range(args.num_users):
-            # 下发共享头部
-            client_list[i].update_weight_classifier(server.get_cla_weight())
+            # 训练个性化头部分类器
+            client_list[i].train_fc(dataloader, server)
+            if c == args.epochs-1:
+                client_list[i].eval()
 
         server.eval()
 

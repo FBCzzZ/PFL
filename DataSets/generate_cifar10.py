@@ -12,6 +12,7 @@ random.seed(1)
 np.random.seed(1)
 num_clients = 20
 num_classes = 10
+alpha = 0.1
 
 niid = True
 balance = False
@@ -25,9 +26,9 @@ def generate_cifar10(dir_path, num_clients, num_classes, niid, balance, partitio
         os.makedirs(dir_path)
         
     # Setup directory for train/test data
-    config_path = dir_path + "config.json"
-    train_path = dir_path + "train/"
-    test_path = dir_path + "test/"
+    config_path = dir_path + f"{num_clients}_{alpha}_config.json"
+    train_path = dir_path + f"{num_clients}_{alpha}/train/"
+    test_path = dir_path + f"{num_clients}_{alpha}/test/"
 
     if check(config_path, train_path, test_path, num_clients, num_classes, niid, balance, partition):
         return

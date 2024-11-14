@@ -22,7 +22,7 @@ class Clientour(Clientbase):
 
         epoch_loss = []
         spectrums = []
-        self.net.freeze_classifier()  # 冻结分类器
+        # self.net.freeze_classifier()  # 冻结分类器
         for epoch in range(self.local_ep):
             batch_loss = []
             T = 2
@@ -129,15 +129,19 @@ class Clientour(Clientbase):
                 'count': total_count
             }
 
-        self.net.unfreeze_classifier()
+        # self.net.unfreeze_classifier()
         epoch_loss.append(sum(batch_loss) / len(batch_loss))
         print(f'localEpochLoss-conv:{sum(epoch_loss) / len(epoch_loss)}')
 
+
         low_freq_spectrum_l = extract_low_freq(np.mean(spectrums, axis=0), 0.5)
-        return low_freq_spectrum_l, self.get_ExFeature_weight(), sum(epoch_loss) / len(epoch_loss)
+        # np.save(f'/kaggle/working/client{self.id}_spectrum.npy', np.mean(spectrums, axis=0))
+        # np.save(f'/kaggle/working/client{self.id}_lowSpectrum.npy', low_freq_spectrum_l)
+
+        return low_freq_spectrum_l, sum(epoch_loss) / len(epoch_loss)
 
 
-    def train_fc(self, server):
+    def train_fc(self, public_dataset_train, server):
         self.net.train()
         server.net.eval()
         # train and update
@@ -145,16 +149,15 @@ class Clientour(Clientbase):
         T = 2
         epoch_loss = []
         self.net.freeze_feature_extractor()  # 冻结特征提取器
-        for epoch in range(self.local_ep):
+        for epoch in range(self.args.g_ep):
             batch_loss = []
 
-            for batch_idx, (images, labels) in enumerate(server.dataset_train):
-                images, labels = images.to(self.args.device), labels.to(self.args.device)
+            for batch_idx, (features, labels) in enumerate(public_dataset_train):
+                features, labels = features.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()  # 清除梯度
-                feature = self.net(images, with_classify=False)
 
-                output = self.net(feature, just_classify=True)
-                output_g = server.net(feature, just_classify=True)
+                output = self.net(features, just_classify=True)
+                output_g = server.net(features, just_classify=True)
 
 
                 l_probs = F.log_softmax(output / T, dim=0)
@@ -170,14 +173,14 @@ class Clientour(Clientbase):
 
                 if batch_idx % 10 == 0:
                     print('Local Epoch-fc: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                        epoch, batch_idx * len(images), len(self.dataset_train.dataset),
-                              100. * batch_idx / len(self.dataset_train), loss.item()))
+                        epoch, batch_idx * len(features), len(public_dataset_train.dataset),
+                              100. * batch_idx / len(public_dataset_train), loss.item()))
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
 
         self.net.unfreeze_feature_extractor()
         print(f'localEpochLoss-fc:{sum(epoch_loss) / len(epoch_loss)}')
-        return self.get_cla_weight(), sum(epoch_loss) / len(epoch_loss)
+        return sum(epoch_loss) / len(epoch_loss)
 
 
     def eval(self):

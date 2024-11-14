@@ -1,46 +1,27 @@
-import torch
-import copy
-import torch.nn.functional as F
-from models.client_fedavg import Client
-from models.Nets import CNN
-from options import args_parser
+import numpy as np
+import matplotlib.pyplot as plt
 
+# 生成一个示例信号：1Hz和3Hz的正弦波叠加
+fs = 100  # 采样频率 (Hz)
+t = np.arange(0, 2, 1/fs)  # 2秒的时间轴
+signal = np.sin(2 * np.pi * 1 * t) + 0.5 * np.sin(2 * np.pi * 3 * t)
 
-data_list = ['mnist', 'usps', 'svhn', 'syn']
-local_ep_list = [10, 10, 3, 3]
-client_list = []
+# 1. 计算傅里叶变换
+signal_fft = np.fft.fft(signal)
+frequencies = np.fft.fftfreq(len(signal), d=1/fs)  # 获取频率轴
 
+# 2. 只取前一半频率（因为是对称的）
+positive_freqs = frequencies[:len(frequencies)//2]
+magnitude = np.abs(signal_fft[:len(signal)//2]**2)  # 幅值
+
+# 3. 绘制频谱
+plt.figure(figsize=(10, 6))
+plt.plot(positive_freqs, magnitude)
+plt.xlabel('Frequency (Hz)')
+plt.ylabel('Magnitude')
+plt.title('Frequency Spectrum')
+plt.grid()
+plt.show()
 
 if __name__ == '__main__':
-    args = args_parser()
-    args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
-    net = CNN()
-    for i in range(args.num_users):
-        client_list.append(Client(args, data_list[i], copy.deepcopy(net).to(args.device), local_ep_list[i]))
-        weight = torch.load(f'./save/{client_list[i].dataName}_model_state_dict.pth')
-        client_list[i].update_weight(weight)
-
-    dataset_test = [client_list[i].dataset_test for i in range(args.num_users)]
-    dataset_test_len = [len(dataset.dataset) for dataset in dataset_test]
-
-    for i in range(args.num_users):
-        net = client_list[i].net
-        net.eval()
-        for j in range(args.num_users):
-            # testing
-            test_loss = 0
-            correct = 0
-            for idx, (data, target) in enumerate(dataset_test[j]):
-                if args.gpu != -1:
-                    data, target = data.cuda(), target.cuda()
-                log_probs = net(data)
-                # sum up batch loss
-                test_loss += F.cross_entropy(log_probs, target, reduction='sum').item()
-                # get the index of the max log-probability
-                y_pred = log_probs.data.max(1, keepdim=True)[1]
-                correct += y_pred.eq(target.data.view_as(y_pred)).long().cpu().sum()
-
-            test_loss /= dataset_test_len[j]
-            accuracy = 100.00 * correct / dataset_test_len[j]
-            print('\nTest set: Average loss: {:.4f} \n{}Model_{}_Accuracy: {}/{} ({:.2f}%)\n'.format(
-                test_loss, data_list[i], data_list[j], correct, dataset_test_len[j], accuracy))
+    pass

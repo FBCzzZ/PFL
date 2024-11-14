@@ -8,8 +8,13 @@ class Serverour(Serverbase):
     def __init__(self, args):
         super().__init__(args)
         self.global_feature_distributions = {}
+        global_model_weights = self.get_cla_weight()
+        self.momentum = {key: torch.zeros_like(val) for key, val in global_model_weights.items()}
         # 动量系数
-        self.momentum = 0.3
+        self.beta = 0.9
+
+        # 平滑系数
+        self.alpha = 0.3
         # 学习率
         self.lr = 0.01
 
@@ -54,7 +59,7 @@ class Serverour(Serverbase):
 
         self.net.unfreeze_feature_extractor()
         print(f'globEpochLoss-fc:{sum(epoch_loss) / len(epoch_loss)}')
-        return self.get_cla_weight(), sum(epoch_loss) / len(epoch_loss)
+        return sum(epoch_loss) / len(epoch_loss)
 
 
     def generate_feature(self, global_correct_per_label, global_total_per_label):
@@ -69,8 +74,7 @@ class Serverour(Serverbase):
             else:
                 accuracy = 0.0
 
-            samples_per_label[label] = int(base_sample_size * (1 - accuracy) * random.uniform(0.8, 1.2))
-
+            samples_per_label[label] = int(base_sample_size * (1 - accuracy) * random.uniform(0.8, 1.2)) + 1
 
 
         # 用于存储生成的伪特征
@@ -86,6 +90,7 @@ class Serverour(Serverbase):
             for _ in range(samples_per_label[label]):
                 sample = torch.normal(mean=mean, std=std_dev).clone()
                 pseudo_features[label].append(sample.unsqueeze(0))  # 添加一个维度以保持一致性
+
 
          # 将每个标签的伪特征转换为张量并合并
         for label in pseudo_features:
@@ -109,10 +114,10 @@ class Serverour(Serverbase):
 
                 # 使用动量进行更新
                 self.global_feature_distributions[label]['mean'] = (
-                        self.momentum * self.global_feature_distributions[label]['mean'] + (1 - self.momentum) * client_mean
+                        self.alpha * self.global_feature_distributions[label]['mean'] + (1 - self.alpha) * client_mean
                 )
                 self.global_feature_distributions[label]['var'] = (
-                        self.momentum * self.global_feature_distributions[label]['var'] + (1 - self.momentum) * client_var
+                        self.alpha * self.global_feature_distributions[label]['var'] + (1 - self.alpha) * client_var
                 )
 
 
@@ -120,6 +125,18 @@ class Serverour(Serverbase):
         w_FFT_np = np.vstack(w_FFT_list)
         w_FFT_glob = np.mean(w_FFT_np, axis=0)
         return w_FFT_glob
+
+
+    def agg_cla_mom(self, cla_w_local):
+        avg_weights = self.average_weights_dict(cla_w_local)
+        global_weights = self.get_cla_weight()
+        # 计算动量并更新全局模型
+        for key in global_weights.keys():
+            # 动量更新
+            self.momentum[key] = self.beta * self.momentum[key] + (avg_weights[key] - global_weights[key])
+            # 用动量更新全局模型
+            global_weights[key] += self.lr * self.momentum[key]
+        self.update_weight_classifier(global_weights)
 
 
     def get_ExFeature_weight(self):

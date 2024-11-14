@@ -75,17 +75,17 @@ class DatasetLoader(Dataset):
 
             # 4. 读取仪表数字数据集
             # 加载训练集
-            train_file = f'{self.dataDir}/meterdigits'
-            # train_file = f'{self.dataDir}/md-dataset/meterdigits'
+            # train_file = f'{self.dataDir}/meterdigits'
+            train_file = f'{self.dataDir}/md-dataset/meterdigits'
 
             train = MeterDigitDataset(train_file, transform=transform)
 
             transform = transforms.Compose(
                 [transforms.ToTensor(), normalize])
-            # test = torchvision.datasets.CIFAR10(root=self.dataDir +
-            #                              "/cifar10/Cifar10/rawdata", train=False, download=True, transform=transform)
             test = torchvision.datasets.CIFAR10(root=self.dataDir +
-                                         "/Cifar10/rawdata", train=False, download=True, transform=transform)
+                                         "/cifar10/Cifar10/rawdata", train=False, download=True, transform=transform)
+            # test = torchvision.datasets.CIFAR10(root=self.dataDir +
+            #                              "/Cifar10/rawdata", train=False, download=True, transform=transform)
 
         train_loader = torch.utils.data.DataLoader(train, self.batch_size, shuffle=False)
         test_loader = torch.utils.data.DataLoader(test, self.batch_size, shuffle=False)
@@ -93,8 +93,8 @@ class DatasetLoader(Dataset):
         return train_loader, test_loader
 
     def read_data(self, is_train=True):
-        # dataPath = f'{self.dataDir}/cifar10-dir0-1'
-        dataPath = f'{self.dataDir}'
+        dataPath = f'{self.dataDir}/cifar10-dir0-1'
+        # dataPath = f'{self.dataDir}'
         if is_train:
             train_data_dir = os.path.join(dataPath, self.dataName, 'train/')
 
