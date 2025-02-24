@@ -12,9 +12,9 @@ class Clientfedrep(Clientbase):
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
         epoch_loss = []
+        self.net.freeze_classifier()  # 冻结分类器
         for epoch in range(self.local_ep):
             batch_loss = []
-            self.net.freeze_classifier()  # 冻结分类器
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()  # 清除梯度
@@ -31,8 +31,8 @@ class Clientfedrep(Clientbase):
                               100. * batch_idx / len(self.dataset_train), loss.item()))
                 batch_loss.append(loss.item())
 
-            self.net.unfreeze_classifier()
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
+        self.net.unfreeze_classifier()
         print(f'localEpochLoss-conv:{sum(epoch_loss) / len(epoch_loss)}')
         return self.get_ExFeature_weight(), sum(epoch_loss) / len(epoch_loss)
 
@@ -42,9 +42,9 @@ class Clientfedrep(Clientbase):
         optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
         epoch_loss = []
+        self.net.freeze_feature_extractor()  # 冻结特征提取器
         for epoch in range(self.local_ep):
             batch_loss = []
-            self.net.freeze_feature_extractor()  # 冻结特征提取器
             for batch_idx, (images, labels) in enumerate(self.dataset_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 self.net.zero_grad()  # 清除梯度
@@ -69,25 +69,25 @@ class Clientfedrep(Clientbase):
     def get_ExFeature_weight(self):
         conv_weights = {}
         for name, param in self.net.named_parameters():
-            if 'conv' in name:
+            if 'conv' in name or 'fc1' in name or 'fc2' in name:
                 conv_weights[name] = param.data
         return conv_weights
 
     def get_cla_weight(self):
         cla_weights = {}
         for name, param in self.net.named_parameters():
-            if 'fc' in name:
+            if 'fc3' in name:
                 cla_weights[name] = param.data
         return cla_weights
 
     def update_weight_ExFeature(self, conv_weights):
         with torch.no_grad():
             for name, param in self.net.named_parameters():
-                if 'conv' in name:
+                if 'conv' in name or 'fc1' in name or 'fc2' in name:
                     param.data.copy_(conv_weights[name])
 
     def update_weight_classifier(self, fc_weights):
         with torch.no_grad():
             for name, param in self.net.named_parameters():
-                if 'fc' in name:
+                if 'fc3' in name:
                     param.data.copy_(fc_weights[name])

@@ -3,3 +3,7 @@
 /.idea
 /__pycache__
 /picture
+/ours_exfeature.py
+/ours_classify.py
+/models/client/clientour_exfeature.py
+/models/client/clientour_classify.py

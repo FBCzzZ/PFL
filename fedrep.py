@@ -1,15 +1,16 @@
 import copy
 import torch
+import numpy as np
 from options import args_parser
 from models.client.clientfedrep import Clientfedrep
 from models.server.serverfedrep import Serverfedrep
 
 
-glob_ep = 1
 client_list = []
 ExFeature_w_local = []
 cla_w_local = []
-client_class = []
+acc_total = []
+loss_total = []
 
 if __name__ == '__main__':
     # parse args
@@ -30,6 +31,8 @@ if __name__ == '__main__':
 
 
     for c in range(args.epochs):
+        acc_list = []
+        loss_list = []
         for i in range(args.num_users):
             # 下发特征提取器
             client_list[i].update_weight_ExFeature(server.get_ExFeature_weight())
@@ -46,9 +49,12 @@ if __name__ == '__main__':
             ExFeature_w_local[i] = copy.deepcopy(w)
             loss_locals.append(copy.deepcopy(loss))
 
-            client_list[i].eval()
+            test_acc, test_loss = client_list[i].eval()
 
-
+            acc_list.append(test_acc)  # 测试准确率
+            loss_list.append(test_loss)  # 测试损失
+        acc_total.append(acc_list)
+        loss_total.append(loss_list)
         # 聚合特征提取器
         w_avg = server.average_weights_dict(ExFeature_w_local)
         server.update_weight_ExFeature(w_avg)
@@ -56,6 +62,8 @@ if __name__ == '__main__':
 
         server.eval()
 
+    np.save("/kaggle/working/acc_total.npy", np.array(acc_total))
+    np.save("/kaggle/working/loss_total.npy", np.array(loss_total))
     # 保存模型
     for i in range(args.num_users):
         client_list[i].save()
